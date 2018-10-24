@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">MixSlack_1</string>
+    <string name="help_textView">Need help?\nTap the button below!</string>
+    <string name="help_ButtonView">Tap for help</string>
+</resources>
