@@ -1,6 +1,7 @@
 package com.example.indoo.mixslack_1;
 
 import android.content.DialogInterface;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
@@ -24,7 +25,8 @@ import java.util.Hashtable;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String token = "xoxp-456534988487-457103289222-455926624885-6a89615d41d90936a0a0e0adfaa3c7a8";
+    private static final String token = "xoxb-456534988487-463490781060-ACLt0V65iEtDUDxNQMssltXb";
+    private static final String tokenUser = "xoxp-456534988487-455488467666-463661678274-4ee432a3602f872e82b9ad2f65377ba1";
     private static final String url = "https://slack.com/api/chat.postMessage?";
     private static final String channel = "CDDBC1BT5";
     private static final String text = "Someone needs help at the front desk! If you want to help, reply yes to this message";
@@ -35,7 +37,7 @@ public class MainActivity extends AppCompatActivity {
     final String[] user_name = {null};
     //URLS
     String name_url = "https://slack.com/api/users.list?token=" + token + "&pretty=1";
-    String postMsg_url = url + "token=" + token + "&channel=" + channel + "&text=" + text + "&as_user=true&pretty=1";
+    String postMsg_url = url + "token=" + token + "&channel=" + channel + "&text=" + text + "&pretty=1";
     private Button help_button;
     private AlertDialog.Builder alertIfResponded, alertIfTimeout;
     private ProgressBar progrssBarForReplies;
@@ -43,6 +45,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView mTextView;
     private RequestQueue queue;
     private int timer = 0;
+    private AsyncTask asyncTask;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,7 +66,6 @@ public class MainActivity extends AppCompatActivity {
         mTextView = findViewById(R.id.help_textView);
         ///Set ID for progressBar used when checking for replies
         progrssBarForReplies = findViewById(R.id.replyProgressBar);
-
         //If we don't want to show the progress dialog, hide it
         progrssBarForReplies.setVisibility(View.GONE);
 
@@ -75,95 +77,138 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(DialogInterface dialog, int which) {
                 progrssBarForReplies.setVisibility(View.GONE);
                 help_button.setVisibility(View.VISIBLE);
+                mTextView.setText("Please wait while someone responds..");
+            }
+        });
+
+        alertIfTimeout.setCancelable(false);
+        alertIfTimeout.setTitle("Such Late. Much Time!");
+        alertIfTimeout.setMessage("Everyone busy! Try again easy!");
+        alertIfTimeout.setNegativeButton("Ja!", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                progrssBarForReplies.setVisibility(View.GONE);
+                help_button.setVisibility(View.VISIBLE);
+                mTextView.setText("Need help?\nTap the button below!");
+            }
+        });
+        //String Requests
+        // Request a string response for NAMES URL.
+        final StringRequest stringRequest = new StringRequest(Request.Method.GET, name_url,
+                new Response.Listener<String>() {
+                    @Override
+                    public void onResponse(String response) {
+                        //Code for names to hashTable:
+                        Log.v("stringRequest0", response);
+                        try {
+                            JSONObject namesJSON = new JSONObject(response);
+                            JSONArray name_id_array;
+                            name_id_array = namesJSON.getJSONArray("members");
+                            JSONObject arrayElem;
+                            for (int i = 0; i < name_id_array.length(); i++) {
+                                arrayElem = (JSONObject) name_id_array.get(i);
+                                if (arrayElem.has("real_name")) {
+                                    id_name_table.put(arrayElem.getString("id"), arrayElem.getString("real_name"));
+                                } else
+                                    id_name_table.put(arrayElem.getString("id"), "Someone");
+                            }
+                        } catch (JSONException ignored) {
+                            mTextView.setText("That didn't work1!");
+                        }
+                    }
+                }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                mTextView.setText("That didn't work2!");
+            }
+        });
+
+        // Request a string to post a message into SLACK and getback its unique_ts:
+        final StringRequest stringRequest1 = new StringRequest(Request.Method.GET, postMsg_url,
+                new Response.Listener<String>() {
+                    @Override
+                    public void onResponse(String response) {
+                        //Code for getting unique_ts of the posted message:
+                        Log.v("stringRequest1", response);
+                        try {
+                            JSONObject postMsgResp = new JSONObject(response);
+                            JSONObject msgObj = postMsgResp.getJSONObject("message");
+                            unique_ts[0] = msgObj.getString("ts");
+                        } catch (JSONException ignored) {
+                            mTextView.setText("That didn't work3!");
+                        }
+                    }
+                }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                mTextView.setText("That didn't work4!");
             }
         });
 
         help_button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                timer = 0;
+                asyncTask = new AsyncTask() {
+                    @Override
+                    protected Object doInBackground(Object[] objects) {
+                        Log.v("BACKGROUND", "Timer = " + timer);
+
+                        try {
+                            while (timer < 120) {
+                                Thread.sleep(2000);
+                                timer += 2;
+                            }
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        return null;
+                    }
+                };
+                asyncTask.execute();
                 unique_ts[0] = "";
                 replied[0] = false;
+                user_name[0] = "";
+                if (!replied[0]) {
+                    help_button.setVisibility(View.GONE);
+                    progrssBarForReplies.setVisibility(View.VISIBLE);
+                    mTextView.setText("Please wait while someone responds..");
+                }
                 //Show the progress bar here and hide the button
 
                 // Instantiate the RequestQueue.
                 queue = SingletonRequestQueue.getInstance(MainActivity.this).getmRequestQueue();
-
-                // Request a string response for NAMES URL.
-                StringRequest stringRequest = new StringRequest(Request.Method.GET, name_url,
-                        new Response.Listener<String>() {
-                            @Override
-                            public void onResponse(String response) {
-                                //Code for names to hashTable:
-                                try {
-                                    JSONObject namesJSON = new JSONObject(response);
-                                    JSONArray name_id_array;
-                                    name_id_array = namesJSON.getJSONArray("members");
-                                    JSONObject arrayElem;
-                                    for (int i = 0; i < name_id_array.length(); i++) {
-                                        arrayElem = (JSONObject) name_id_array.get(i);
-                                        if (arrayElem.has("real_name")) {
-                                            id_name_table.put(arrayElem.getString("id"), arrayElem.getString("real_name"));
-                                        } else
-                                            id_name_table.put(arrayElem.getString("id"), "Someone");
-                                    }
-                                } catch (JSONException ignored) {
-                                    mTextView.setText("That didn't work1!");
-                                }
-                            }
-                        }, new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        mTextView.setText("That didn't work2!");
-                    }
-                });
-
-                // Request a string to post a message into SLACK and getback its unique_ts:
-                StringRequest stringRequest1 = new StringRequest(Request.Method.GET, postMsg_url,
-                        new Response.Listener<String>() {
-                            @Override
-                            public void onResponse(String response) {
-                                //Code for getting unique_ts of the posted message:
-                                try {
-                                    JSONObject postMsgResp = new JSONObject(response);
-                                    JSONObject msgObj = postMsgResp.getJSONObject("message");
-                                    unique_ts[0] = msgObj.getString("ts");
-                                } catch (JSONException ignored) {
-                                    mTextView.setText("That didn't work3!");
-                                }
-                            }
-                        }, new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        mTextView.setText("That didn't work4!");
-                    }
-                });
-
                 // Add the NAMES request to the RequestQueue.
                 queue.add(stringRequest);
                 queue.add(stringRequest1);
-                if (!replied[0]) {
-                    help_button.setVisibility(View.GONE);
-                    progrssBarForReplies.setVisibility(View.VISIBLE);
-                }
                 yesResponse();
             }
         });
     }
 
     public void yesResponse() {
-        Log.v("yesResponse", "Inside yesResponse");
-        {
+        Log.v("TIMER", "time = " + timer);
+        if (timer > 10) {
+            replied[0] = false;
+            progrssBarForReplies.setVisibility(View.GONE);
+            help_button.setVisibility(View.VISIBLE);
+            mTextView.setText("Need help?\nTap the button below!");
+            unique_ts[0] = "";
+            replied[0] = false;
+            user_name[0] = "";
+            alertIfTimeout.show();
+            return;
+        } else {
             String uniq_ts = unique_ts[0];
             //Request a string to check for reply:
-            String replyUrl = "https://slack.com/api/conversations.replies?token=" + token + "&channel=" + channel + "&ts=" + unique_ts[0] + "&pretty=1";
-            Log.v("yesResponse", "Creating string request");
+            String replyUrl = "https://slack.com/api/conversations.replies?token=" + tokenUser + "&channel=" + channel + "&ts=" + unique_ts[0] + "&pretty=1";
             StringRequest stringRequest2 = new StringRequest(Request.Method.GET, replyUrl,
                     new Response.Listener<String>() {
                         @Override
                         public void onResponse(String response) {
+                            //if more than 2 minutes:
                             //Code for getting the replied message and username:
                             try {
-                                Log.v("yesResponse", "Trying to get JSON Data");
                                 replied[0] = false;
                                 JSONObject replyResp = new JSONObject(response);
                                 JSONArray replyMsgsArray = replyResp.getJSONArray("messages");
@@ -172,306 +217,57 @@ public class MainActivity extends AppCompatActivity {
                                 repliedMsg[0] = myMsgObj.getString("text");//The replied msg is checked if it is a YES
                                 //If it is a yes, update the replied to true and get the username
                                 if (repliedMsg[0].toLowerCase().equals("yes")) {
-                                    Log.v("yesResponse", " The replied string is yes");
                                     replied[0] = true;
                                     String user_id = myMsgObj.getString("user");
                                     user_name[0] = id_name_table.get(user_id);
                                     progrssBarForReplies.setVisibility(View.GONE);
                                     help_button.setVisibility(View.VISIBLE);
-                                    alertIfResponded.setTitle("Success");
-                                    alertIfResponded.setMessage(user_name[0] + " is coming. Please wait");
+                                    mTextView.setText("Need help?\nTap the button below!");
+                                    alertIfResponded.setTitle("Almost there!");
+                                    alertIfResponded.setMessage(user_name[0] + " will be with you shortly..");
                                     alertIfResponded.show();
+                                    confirmationMessagePoster(user_name[0]);
                                 } else {
-                                    Log.v("yesResponse", "The replied string isn't yes - so calling yesResponse again");
                                     yesResponse();
                                 }
                             } catch (JSONException ignored) {
-                                Log.v("yesResponse", "JSON Parsing exception");
                                 yesResponse();
                             }
                         }
                     }, new Response.ErrorListener() {
                 @Override
                 public void onErrorResponse(VolleyError error) {
-                    Log.v("yesResponse", "Inside yesResponse Error Response");
                     yesResponse();
                 }
             });
-            Log.v("yesResponse", "Adding stringRequest2 into the queue");
             queue.add(stringRequest2);
         }
     }
-    /**
-     *
-     final OkHttpClient client = new OkHttpClient();
-     final String[] responseString = {null};
-     final Request request = new Request.Builder().url(url).build();
 
-     client.newCall(request).enqueue(new Callback() {
-    @Override public void onFailure(Call call, IOException e) {
-    responseString[0] = null;
-    }
+    public void confirmationMessagePoster(String UserName) {
+        String text = UserName + " has confirmed.";
+        String postMsgURL = url + "token=" + token + "&channel=" + channel + "&text=" + text + "&pretty=1";
+        // Request a string to post a message into SLACK :
+        final StringRequest stringRequest = new StringRequest(Request.Method.GET, postMsgURL,
+                new Response.Listener<String>() {
+                    @Override
+                    public void onResponse(String response) {
+                        Log.v("confirmResponse = ", response);
+                        //Code for getting unique_ts of the posted message:
+                        try {
+                            JSONObject postMsgResp = new JSONObject(response);
+                            JSONObject msgObj = postMsgResp.getJSONObject("message");
+                        } catch (JSONException ignored) {
+                            mTextView.setText("That didn't work3!");
+                        }
+                    }
+                }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                mTextView.setText("That didn't work4!");
+            }
+        });
 
-    @Override public void onResponse(Call call, Response response) throws IOException {
-    responseString[0] = response.body().string();
+        queue.add(stringRequest);
     }
-    });
-     if (responseString[0]!=null){
-     try {
-     return new JSONObject(responseString[0]);
-     } catch (JSONException e) {
-     return  null;
-     }
-     }
-     return null;
-     */
 }
-
-
-/**
- * alertIfResponded.setMessage("Someone is coming!");
- * alertIfResponded.setCancelable(false);
- * clickedRespondAlert = false;
- * alertIfResponded.setNeutralButton("Okay!", new DialogInterface.OnClickListener() {
- *
- * @Override public void onClick(DialogInterface dialog, int which) {
- * clickedRespondAlert = true;
- * }
- * });
- * if (!clickedRespondAlert)
- * alertIfResponded.show();
- * <p>
- * showProgessDialog = !showProgessDialog;
- * if (showProgessDialog) {
- * progrssBarForReplies.setVisibility(View.VISIBLE);
- * help_button.setVisibility(View.GONE);
- * } else {
- * progrssBarForReplies.setVisibility(View.GONE);
- * }
- * <p>
- * try {
- * name_id_array = namesJSON.getJSONArray("members");
- * Hashtable<String ,String> id_name_table = new Hashtable<String, String>();
- * JSONObject arrayElem = new JSONObject();
- * for (int i =0; i<name_id_array.length();i++){
- * arrayElem = (JSONObject) name_id_array.get(i);
- * if (id_name_table.containsKey("real_name")){
- * id_name_table.put(arrayElem.getString("id"),arrayElem.getString("real_name"));
- * }
- * else
- * id_name_table.put(arrayElem.getString("id"),"Someone");
- * }
- * <p>
- * //Code to post the message into slack and getthe message's unique_ts
- * JSONObject postMsgResp = httpToString(url +
- * "token=" + token +
- * "&channel=" + channel +
- * "&text=" + text +
- * "&as_user=true&pretty=1");
- * <p>
- * if (postMsgResp!=null){
- * JSONObject msgObj = postMsgResp.getJSONObject("messages");
- * String unique_ts = msgObj.getString("ts");
- * <p>
- * //Code to keep checking for the replies and timer part
- * boolean replied = false;
- * String repliedMsg = null;
- * String user_name = null;
- * int timer = 0;
- * while (!replied){
- * String replyUrl = "https://slack.com/api/conversations.replies?token="+token+"&channel="+channel+"&ts="+unique_ts+"&pretty=1";
- * JSONObject replyResp = httpToString(replyUrl);
- * if (replyResp!=null){
- * if (timer >= 120){
- * //hide the progress bar, show the button, alert message (No one responded, try again) and break
- * }
- * JSONArray replyMsgsArray = replyResp.getJSONArray("messages");
- * int numOfMsgs = replyMsgsArray.length();
- * JSONObject myMsgObj = replyMsgsArray.getJSONObject(numOfMsgs-1);
- * repliedMsg = myMsgObj.getString("text");//The replied msg is checked if it is a YES
- * if (repliedMsg.toLowerCase().equals("yes")){
- * //If someone replied yes, get their username, and post the alert message
- * String user_id = myMsgObj.getString("user");
- * user_name = id_name_table.get(user_id);
- * alertIfResponded.setMessage(user_name + "is coming to you. Please wait..");
- * alertIfResponded.show();
- * }
- * else {
- * try{
- * Thread.sleep(1000);
- * }catch(InterruptedException e){
- * }
- * timer++;
- * }
- * }
- * else{
- * //i.e the reply response was null, so, hide the progress bar, show the button, toast message(Failed to ask, try again) and break
- * }
- * }
- * }
- * else {
- * //the json is null, so Hide the progress bar and show the button and toast message (Failed to ask, try again)
- * }
- * } catch (JSONException e) {//No Array was formed
- * name_id_array = null;
- * //Hide the progress bar and show the button here:
- * }
- * <p>
- * showProgessDialog = !showProgessDialog;
- * if (showProgessDialog) {
- * progrssBarForReplies.setVisibility(View.VISIBLE);
- * help_button.setVisibility(View.GONE);
- * } else {
- * progrssBarForReplies.setVisibility(View.GONE);
- * }
- * <p>
- * try {
- * name_id_array = namesJSON.getJSONArray("members");
- * Hashtable<String ,String> id_name_table = new Hashtable<String, String>();
- * JSONObject arrayElem = new JSONObject();
- * for (int i =0; i<name_id_array.length();i++){
- * arrayElem = (JSONObject) name_id_array.get(i);
- * if (id_name_table.containsKey("real_name")){
- * id_name_table.put(arrayElem.getString("id"),arrayElem.getString("real_name"));
- * }
- * else
- * id_name_table.put(arrayElem.getString("id"),"Someone");
- * }
- * <p>
- * //Code to post the message into slack and getthe message's unique_ts
- * JSONObject postMsgResp = httpToString(url +
- * "token=" + token +
- * "&channel=" + channel +
- * "&text=" + text +
- * "&as_user=true&pretty=1");
- * <p>
- * if (postMsgResp!=null){
- * JSONObject msgObj = postMsgResp.getJSONObject("messages");
- * String unique_ts = msgObj.getString("ts");
- * <p>
- * //Code to keep checking for the replies and timer part
- * boolean replied = false;
- * String repliedMsg = null;
- * String user_name = null;
- * int timer = 0;
- * while (!replied){
- * String replyUrl = "https://slack.com/api/conversations.replies?token="+token+"&channel="+channel+"&ts="+unique_ts+"&pretty=1";
- * JSONObject replyResp = httpToString(replyUrl);
- * if (replyResp!=null){
- * if (timer >= 120){
- * //hide the progress bar, show the button, alert message (No one responded, try again) and break
- * }
- * JSONArray replyMsgsArray = replyResp.getJSONArray("messages");
- * int numOfMsgs = replyMsgsArray.length();
- * JSONObject myMsgObj = replyMsgsArray.getJSONObject(numOfMsgs-1);
- * repliedMsg = myMsgObj.getString("text");//The replied msg is checked if it is a YES
- * if (repliedMsg.toLowerCase().equals("yes")){
- * //If someone replied yes, get their username, and post the alert message
- * String user_id = myMsgObj.getString("user");
- * user_name = id_name_table.get(user_id);
- * alertIfResponded.setMessage(user_name + "is coming to you. Please wait..");
- * alertIfResponded.show();
- * }
- * else {
- * try{
- * Thread.sleep(1000);
- * }catch(InterruptedException e){
- * }
- * timer++;
- * }
- * }
- * else{
- * //i.e the reply response was null, so, hide the progress bar, show the button, toast message(Failed to ask, try again) and break
- * }
- * }
- * }
- * else {
- * //the json is null, so Hide the progress bar and show the button and toast message (Failed to ask, try again)
- * }
- * } catch (JSONException e) {//No Array was formed
- * name_id_array = null;
- * //Hide the progress bar and show the button here:
- * }
- */
-
-
-/**
- showProgessDialog = !showProgessDialog;
- if (showProgessDialog) {
- progrssBarForReplies.setVisibility(View.VISIBLE);
- help_button.setVisibility(View.GONE);
- } else {
- progrssBarForReplies.setVisibility(View.GONE);
- }
- */
-
-
-/**
- * try {
- *                         name_id_array = namesJSON.getJSONArray("members");
- *                         Hashtable<String ,String> id_name_table = new Hashtable<String, String>();
- *                         JSONObject arrayElem = new JSONObject();
- *                         for (int i =0; i<name_id_array.length();i++){
- *                             arrayElem = (JSONObject) name_id_array.get(i);
- *                             if (id_name_table.containsKey("real_name")){
- *                                 id_name_table.put(arrayElem.getString("id"),arrayElem.getString("real_name"));
- *                             }
- *                             else
- *                                 id_name_table.put(arrayElem.getString("id"),"Someone");
- *                         }
- *
- *                         //Code to post the message into slack and getthe message's unique_ts
- *                         JSONObject postMsgResp = httpToString(url +
- *                                 "token=" + token +
- *                                 "&channel=" + channel +
- *                                 "&text=" + text +
- *                                 "&as_user=true&pretty=1");
- *
- *                         if (postMsgResp!=null){
- *                             JSONObject msgObj = postMsgResp.getJSONObject("messages");
- *                             String unique_ts = msgObj.getString("ts");
- *
- *                             //Code to keep checking for the replies and timer part
- *                             boolean replied = false;
- *                             String repliedMsg = null;
- *                             String user_name = null;
- *                             int timer = 0;
- *                             while (!replied){
- *                                 String replyUrl = "https://slack.com/api/conversations.replies?token="+token+"&channel="+channel+"&ts="+unique_ts+"&pretty=1";
- *                                 JSONObject replyResp = httpToString(replyUrl);
- *                                 if (replyResp!=null){
- *                                     if (timer >= 120){
- *                                         //hide the progress bar, show the button, alert message (No one responded, try again) and break
- *                                     }
- *                                     JSONArray replyMsgsArray = replyResp.getJSONArray("messages");
- *                                     int numOfMsgs = replyMsgsArray.length();
- *                                     JSONObject myMsgObj = replyMsgsArray.getJSONObject(numOfMsgs-1);
- *                                     repliedMsg = myMsgObj.getString("text");//The replied msg is checked if it is a YES
- *                                     if (repliedMsg.toLowerCase().equals("yes")){
- *                                         //If someone replied yes, get their username, and post the alert message
- *                                         String user_id = myMsgObj.getString("user");
- *                                         user_name = id_name_table.get(user_id);
- *                                         alertIfResponded.setMessage(user_name + "is coming to you. Please wait..");
- *                                         alertIfResponded.show();
- *                                     }
- *                                     else {
- *                                         try{
- *                                             Thread.sleep(1000);
- *                                         }catch(InterruptedException e){
- *                                         }
- *                                         timer++;
- *                                     }
- *                                 }
- *                                 else{
- *                                     //i.e the reply response was null, so, hide the progress bar, show the button, toast message(Failed to ask, try again) and break
- *                                 }
- *                             }
- *                         }
- *                         else {
- *                             //the json is null, so Hide the progress bar and show the button and toast message (Failed to ask, try again)
- *                         }
- *                     } catch (JSONException e) {//No Array was formed
- *                         name_id_array = null;
- *                         //Hide the progress bar and show the button here:
- *                     }
- */
